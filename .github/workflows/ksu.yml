@@ -1,0 +1,97 @@
+name: Build KernelSU
+on:
+  watch:
+    types: [started]
+
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build KernelSU
+    runs-on: ubuntu-latest
+    container: ghcr.io/ozipoetra/docker:v1.0.3
+    steps:
+    - uses: actions/checkout@v3
+    - name: Download Clang Toolchain
+      run: |
+        #wget -q https://github.com/mitsu00/build_test/releases/download/clang/clang.zip
+        #unzip clang.zip -d clang
+        #rm clang.zip
+        #git clone https://github.com/vijaymalav564/vortex-clang.git -b master --depth=1 clang
+        git clone --depth=1 git://git.code.sf.net/p/gengkapak/clang-gengkapak clang
+        #git clone --depth=1 https://gitlab.com/LeCmnGend/proton-clang.git -b clang-16 clang
+        #git clone --depth=1 https://github.com/mvaisakh/gcc-arm64 gcc64
+        #git clone --depth=1 https://ozipoetra120@dev.azure.com/ozipoetra120/test/_git/clang-18 clang
+
+    - name: Download kernel source
+      run: |
+        cd $GITHUB_WORKSPACE
+        #git clone https://github.com/mitsu00/android_kernel_xiaomi_mt6768 -b lineage-20 --depth=1 android-kernel
+        #git clone https://github.com/mitsu00/kernel_mt6768 -b main --depth=1 android-kernel
+        #git clone https://github.com/mitsu00/android_kernel_xiaomi_mt6768 --depth=1 android-kernel
+        #git clone https://ozipoetra120@dev.azure.com/ozipoetra120/test/_git/kernel_xiaomi_mt6768 -b uwu --depth=1 android-kernel
+        #git clone https://github.com/nuuwy0/kernel_xiaomi_mt6768 -b uwu --depth=1 android-kernel
+        #git clone https://github.com/mitsu00/merlin-r-oss -b main --depth=1 android-kernel
+        # git clone https://github.com/mitsu00/kernel_xiaomi_mt6768 -b perm --depth=1 android-kernel
+        git clone https://github.com/nuuwy0/kernel_xiaomi_mt6768 -b stable android-kernel --depth=1
+
+    - name: Kernel patch
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone https://github.com/mitsuav/workflow-test -b main --depth=1 patchsu
+        cd android-kernel
+        git apply $GITHUB_WORKSPACE/patchsu/KernelSU.patch
+  
+    - name: Setup KernelSU
+      run: |
+        cd $GITHUB_WORKSPACE/android-kernel
+        curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+
+    - name: Build Kernel
+      run: |
+        cd $GITHUB_WORKSPACE/android-kernel
+        export LC_ALL=C
+        #export PATH=$GITHUB_WORKSPACE/clang/bin:$GITHUB_WORKSPACE/gcc64/bin:$GITHUB_WORKSPACE/gcc32/bin:$PATH
+        export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+        export ARCH=arm64
+        export SUBARCH=arm64
+        #export CLANG_TRIPLE=aarch64-linux-gnu-
+        #export CROSS_COMPILE=aarch64-elf-
+        #export CROSS_COMPILE_COMPAT=arm-eabi-
+        #export CC=gcc
+        export LLVM=1
+        export LLVM_IAS=1
+        export LD=ld.lld
+        export AR=llvm-ar
+        export NM=llvm-nm
+        export OBJCOPY=llvm-objcopy
+        export OBJDUMP=llvm-objdump
+        export STRIP=llvm-strip
+        export KBUILD_BUILD_HOST=GitHub
+        export KBUILD_BUILD_USER=mitsu00
+        make clean
+        make mrproper
+        make O=out merlin_defconfig
+        make -j$(nproc --all) O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+
+    - name: Make Anykernel3
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone https://github.com/osm0sis/AnyKernel3
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+          sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
+          sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+          cp android-kernel/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          rm -rf AnyKernel3/.git* AnyKernel3/README.md
+    
+    - name: Upload Kernel File
+      uses: actions/upload-artifact@v3
+      with:
+        name: Image.gz-dtb
+        path: android-kernel/out/arch/arm64/boot/Image.gz-dtb
+
+    - name: Upload AnyKernel3
+      uses: actions/upload-artifact@v3
+      with:
+        name: merlinx-kernel-noc-ksu
+        path: AnyKernel3/*

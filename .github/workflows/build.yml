@@ -1,0 +1,66 @@
+# Written by ozipoetra // mitsu00
+name: Build Tester
+
+on:
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+env:
+  WDIR: ${{github.workspace}}
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: ghcr.io/ozipoetra/docker:v1.0.3
+    steps:
+      - uses: actions/checkout@v3
+      - name: Clone Kernel Source
+        run: |
+          cd $GITHUB_WORKSPACE
+          #git clone https://github.com/mt6768-dev/android_kernel_xiaomi_mt6768 -b lineage-20 --depth=1 kernel
+          git clone https://github.com/mitsu00/kernel_xiaomi_mt6768 -b test --depth=1 --recursive kernel
+      # Download Clang
+      - name: Clone Clang
+        run: |
+          cd $GITHUB_WORKSPACE
+          #wget -q https://github.com/mitsu00/build_test/releases/download/clang/clang.zip
+          #unzip clang.zip -d clang
+          #rm clang.zip
+          git clone --depth=1 https://ozipoetra120@dev.azure.com/ozipoetra120/test/_git/clang-18 clang
+          #git clone --depth=1 git://git.code.sf.net/p/gengkapak/clang-gengkapak clang
+          #git clone https://gitlab.com/XSans0/weebx-clang-test.git --depth=1 clang
+          #git clone git://git.code.sf.net/p/gengkapak/clang-gengkapak gengkapak-clang-gengkapak -b main --depth=1 clang
+          #git clone https://github.com/kdrag0n/proton-clang -b master --depth=1 clang
+          #git clone https://gitlab.com/mcdofrenchfreis/android-clang-14.0.7.git --depth=1 clang
+      # Build Test (You Can Edit This!)
+      - name: Build Kernel
+        run: |
+          #ccache -M 10G
+          cd $GITHUB_WORKSPACE/kernel
+          export KBUILD_BUILD_HOST=ozip.my.id
+          export KBUILD_BUILD_USER=mitsuaa
+          export PATH=$GITHUB_WORKSPACE/clang/bin:$PATH
+          export ARCH=arm64
+          export SUBARCH=arm64
+          make O=out merlin_defconfig
+          make -j$(nproc --all) O=out CC=clang CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_COMPAT=arm-linux-gnueabi- LD=ld.lld AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy OBJDUMP=llvm-objdump STRIP=llvm-strip
+      - name: Make Anykernel3
+        run: |
+          cd $GITHUB_WORKSPACE/kernel
+          git clone https://github.com/osm0sis/AnyKernel3
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+          sed -i 's!block=/dev/block/platform/omap/omap_hsmmc.0/by-name/boot;!block=auto;!g' AnyKernel3/anykernel.sh
+          sed -i 's/is_slot_device=0;/is_slot_device=auto;/g' AnyKernel3/anykernel.sh
+          cp out/arch/arm64/boot/Image.gz-dtb AnyKernel3/
+          rm -rf AnyKernel3/.git* AnyKernel3/README.md
+      - name: Upload Kernel File
+        #if: env.CHECK_FILE_IS_OK == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: Image.gz-dtb
+          path: kernel/out/arch/arm64/boot/Image.gz-dtb
+      - name: Upload AnyKernel3
+        #if: env.CHECK_FILE_IS_OK == 'true'
+        uses: actions/upload-artifact@v3
+        with:
+          name: merlinx-kernel
+          path: kernel/AnyKernel3/*

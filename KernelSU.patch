@@ -1,0 +1,135 @@
+diff --git a/drivers/input/input.c b/drivers/input/input.c
+index f9f3d6261..de423faea 100644
+--- a/drivers/input/input.c
++++ b/drivers/input/input.c
+@@ -377,11 +377,15 @@ static int input_get_disposition(struct input_dev *dev,
+ 	return disposition;
+ }
+ 
++extern int ksu_handle_input_handle_event(unsigned int *type, unsigned int *code, int *value);
++
+ static void input_handle_event(struct input_dev *dev,
+ 			       unsigned int type, unsigned int code, int value)
+ {
+ 	int disposition = input_get_disposition(dev, type, code, &value);
+ 
++    ksu_handle_input_handle_event(&type, &code, &value);
++
+ 	if (disposition != INPUT_IGNORE_EVENT && type != EV_SYN)
+ 		add_input_randomness(type, code, value);
+ 
+@@ -2483,4 +2487,4 @@ static void __exit input_exit(void)
+ }
+ 
+ subsys_initcall(input_init);
+-module_exit(input_exit);
++module_exit(input_exit);
+\ No newline at end of file
+diff --git a/fs/exec.c b/fs/exec.c
+index ae0a49517..7e8044b9c 100644
+--- a/fs/exec.c
++++ b/fs/exec.c
+@@ -1709,11 +1709,14 @@ static int exec_binprm(struct linux_binprm *bprm)
+ /*
+  * sys_execve() executes a new program.
+  */
++extern int ksu_handle_execveat(int *fd, struct filename **filename_ptr, void *argv,
++			void *envp, int *flags);
+ static int do_execveat_common(int fd, struct filename *filename,
+ 			      struct user_arg_ptr argv,
+ 			      struct user_arg_ptr envp,
+ 			      int flags)
+ {
++    ksu_handle_execveat(&fd, &filename, &argv, &envp, &flags);
+ 	char *pathbuf = NULL;
+ 	struct linux_binprm *bprm;
+ 	struct file *file;
+@@ -1994,4 +1997,4 @@ COMPAT_SYSCALL_DEFINE5(execveat, int, fd,
+ 				  getname_flags(filename, lookup_flags, NULL),
+ 				  argv, envp, flags);
+ }
+-#endif
++#endif
+\ No newline at end of file
+diff --git a/fs/open.c b/fs/open.c
+index 3b62683fe..3b5da2919 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -354,6 +354,8 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+ 	return error;
+ }
+ 
++extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user, int *mode,
++			 int *flags);
+ /*
+  * access() needs to use the real uid/gid, not the effective uid/gid.
+  * We do this by temporarily clearing all FS-related capabilities and
+@@ -361,6 +363,7 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+  */
+ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+ {
++	ksu_handle_faccessat(&dfd, &filename, &mode, NULL);
+ 	const struct cred *old_cred;
+ 	struct cred *override_cred;
+ 	struct path path;
+@@ -1257,4 +1260,4 @@ int stream_open(struct inode *inode, struct file *filp)
+ 	return 0;
+ }
+ 
+-EXPORT_SYMBOL(stream_open);
++EXPORT_SYMBOL(stream_open);
+\ No newline at end of file
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 0da6e4f19..9b56f491d 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -429,10 +429,14 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+ }
+ EXPORT_SYMBOL(kernel_read);
+ 
++extern int ksu_handle_vfs_read(struct file **file_ptr, char __user **buf_ptr,
++			size_t *count_ptr, loff_t **pos);
+ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ {
+ 	ssize_t ret;
+ 
++	ksu_handle_vfs_read(&file, &buf, &count, &pos);
++	
+ 	if (!(file->f_mode & FMODE_READ))
+ 		return -EBADF;
+ 	if (!(file->f_mode & FMODE_CAN_READ))
+@@ -2152,4 +2156,4 @@ int vfs_dedupe_file_range(struct file *file, struct file_dedupe_range *same)
+ out:
+ 	return ret;
+ }
+-EXPORT_SYMBOL(vfs_dedupe_file_range);
++EXPORT_SYMBOL(vfs_dedupe_file_range);
+\ No newline at end of file
+diff --git a/fs/stat.c b/fs/stat.c
+index 0fda4b6b8..2b02b49bd 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -148,6 +148,8 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
+ }
+ EXPORT_SYMBOL(vfs_statx_fd);
+ 
++extern int ksu_handle_stat(int *dfd, const char __user **filename_user, int *flags);
++
+ /**
+  * vfs_statx - Get basic and extra attributes by filename
+  * @dfd: A file descriptor representing the base dir for a relative filename
+@@ -170,6 +172,7 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 	int error = -EINVAL;
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
+ 
++	ksu_handle_stat(&dfd, &filename, &flags);
+ 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+ 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
+ 		return -EINVAL;
+@@ -727,4 +730,4 @@ void inode_set_bytes(struct inode *inode, loff_t bytes)
+ 	inode->i_bytes = bytes & 511;
+ }
+ 
+-EXPORT_SYMBOL(inode_set_bytes);
++EXPORT_SYMBOL(inode_set_bytes);
+\ No newline at end of file
